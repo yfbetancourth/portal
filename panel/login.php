@@ -8,9 +8,21 @@ $error = null;
 if (isset($_SESSION['user_id']) && is_int($_SESSION['user_id'])) {
     try {
         $statement = database()->prepare(
-            "SELECT id FROM usuarios WHERE id = :id AND activo = 1 AND rol = 'colaborador' LIMIT 1"
+            "SELECT u.id FROM usuarios u
+             INNER JOIN auth_sessions s ON s.user_id = u.id
+             WHERE u.id = :id AND u.activo = 1 AND u.rol IN ('administrador', 'colaborador')
+               AND s.session_hash = :session_hash AND s.ended_at IS NULL
+             LIMIT 1"
         );
-        $statement->execute(['id' => $_SESSION['user_id']]);
+        $sessionHash = $_SESSION['auth_session_hash'] ?? null;
+        if (!is_string($sessionHash) || !hash_equals($sessionHash, hash('sha256', session_id()))) {
+            close_collaborator_session();
+            redirect('panel/login.php');
+        }
+        $statement->execute([
+            'id' => $_SESSION['user_id'],
+            'session_hash' => $sessionHash,
+        ]);
         if ($statement->fetchColumn()) {
             redirect('panel/');
         }
@@ -37,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = database()->prepare(
                 "SELECT id, password_hash
                  FROM usuarios
-                 WHERE email = :email AND activo = 1 AND rol = 'colaborador'
+                 WHERE email = :email AND activo = 1 AND rol IN ('administrador', 'colaborador')
                  LIMIT 1"
             );
             $statement->execute(['email' => $email]);

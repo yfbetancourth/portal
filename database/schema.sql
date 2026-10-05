@@ -10,9 +10,10 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   `email` VARCHAR(190) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,
   `activo` TINYINT(1) NOT NULL DEFAULT 1,
-  `rol` ENUM('colaborador') NOT NULL DEFAULT 'colaborador',
+  `rol` ENUM('administrador', 'colaborador') NOT NULL DEFAULT 'colaborador',
   `fecha_registro` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  KEY `idx_usuarios_role_active` (`rol`, `activo`),
   UNIQUE KEY `uq_usuarios_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -22,6 +23,11 @@ CREATE TABLE IF NOT EXISTS `panel_modules` (
   `name` VARCHAR(100) NOT NULL,
   `description` VARCHAR(500) NOT NULL DEFAULT '',
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `archive_path` VARCHAR(160) NULL,
+  `archive_original_name` VARCHAR(255) NULL,
+  `archive_sha256` CHAR(64) NULL,
+  `archive_size` BIGINT UNSIGNED NULL,
+  `archive_uploaded_at` DATETIME(6) NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

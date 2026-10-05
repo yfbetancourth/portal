@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/includes/auth.php';
+require_once dirname(__DIR__) . '/includes/module_packages.php';
 $collaborator = require_collaborator();
 
 $error = null;
@@ -60,21 +61,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                 }
             }
-        } elseif ($action === 'update' || $action === 'delete') {
+        } elseif ($action === 'upload' || $action === 'update' || $action === 'delete') {
             if ($id === false) {
                 http_response_code(400);
                 $error = 'El módulo seleccionado no es válido.';
             } else {
+                $newArchivePath = null;
                 try {
                     $connection = database();
-                    $statement = $connection->prepare('SELECT id FROM panel_modules WHERE id = :id');
+                    $statement = $connection->prepare(
+                        'SELECT id, module_key, archive_path FROM panel_modules WHERE id = :id'
+                    );
                     $statement->execute(['id' => $id]);
-                    if (!$statement->fetchColumn()) {
+                    $module = $statement->fetch();
+                    if (!$module) {
                         http_response_code(404);
                         $error = 'No se encontró el módulo seleccionado.';
                     } elseif ($action === 'delete') {
                         $statement = $connection->prepare('DELETE FROM panel_modules WHERE id = :id');
                         $statement->execute(['id' => $id]);
+                        if (is_string($module['archive_path'])) {
+                            remove_module_archive($module['archive_path'], (int) $id);
+                        }
+                        redirect('panel/modulos.php');
+                    } elseif ($action === 'upload') {
+                        $archive = save_module_archive($_FILES['archive'] ?? [], $module['module_key']);
+                        $newArchivePath = $archive['path'];
+                        $statement = $connection->prepare(
+                            'UPDATE panel_modules
+                             SET archive_path = :archive_path,
+                                 archive_original_name = :archive_original_name,
+                                 archive_sha256 = :archive_sha256,
+                                 archive_size = :archive_size,
+                                 archive_uploaded_at = UTC_TIMESTAMP(6)
+                             WHERE id = :id'
+                        );
+                        $statement->execute([
+                            'archive_path' => $archive['path'],
+                            'archive_original_name' => $archive['original_name'],
+                            'archive_sha256' => $archive['sha256'],
+                            'archive_size' => $archive['size'],
+                            'id' => $id,
+                        ]);
+                        if (is_string($module['archive_path'])) {
+                            remove_module_archive($module['archive_path'], (int) $id);
+                        }
                         redirect('panel/modulos.php');
                     } else {
                         $name = $_POST['name'] ?? null;
@@ -103,8 +134,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             redirect('panel/modulos.php');
                         }
                     }
+                } catch (InvalidArgumentException $exception) {
+                    http_response_code(422);
+                    $error = $exception->getMessage();
                 } catch (PDOException $exception) {
+                    if (is_string($newArchivePath)) {
+                        remove_module_archive($newArchivePath, (int) $id);
+                    }
                     error_log('No se pudo actualizar el módulo: ' . $exception->getMessage());
+                    http_response_code(500);
+                    $error = 'No se pudo completar la operación del módulo. Inténtalo más tarde.';
+                } catch (RuntimeException $exception) {
+                    if (is_string($newArchivePath)) {
+                        remove_module_archive($newArchivePath, (int) $id);
+                    }
+                    error_log('No se pudo procesar el ZIP del módulo: ' . $exception->getMessage());
+                    http_response_code(500);
+                    $error = 'No se pudo almacenar el ZIP. Revisa la configuración del almacenamiento del servidor.';
+                } catch (Throwable $exception) {
+                    if (is_string($newArchivePath)) {
+                        remove_module_archive($newArchivePath, (int) $id);
+                    }
+                    error_log('Error inesperado al procesar el módulo: ' . $exception->getMessage());
                     http_response_code(500);
                     $error = 'No se pudo completar la operación del módulo. Inténtalo más tarde.';
                 }
@@ -118,7 +169,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 try {
     $modules = database()->query(
-        'SELECT id, module_key, name, description, is_active
+        'SELECT id, module_key, name, description, is_active,
+                archive_path, archive_original_name, archive_sha256, archive_size, archive_uploaded_at
          FROM panel_modules
          ORDER BY name, id'
     )->fetchAll();
@@ -134,7 +186,7 @@ $activePage = 'modulos';
 require __DIR__ . '/includes/header.php';
 ?>
 <div class="alert alert-info" role="status">
-  Este catálogo organiza módulos futuros. Activar un registro no crea ni publica funcionalidad automáticamente; cada módulo debe integrarse al panel cuando se desarrolle.
+  Los ZIP se guardan fuera de la carpeta pública y no se extraen ni ejecutan. Descárgalos para revisar el código y desplegarlos manualmente; activar un módulo no instala ni publica su contenido.
 </div>
 
 <?php if ($error !== null): ?><div class="alert alert-danger" role="alert"><?= escape($error) ?></div><?php endif; ?>
@@ -182,7 +234,7 @@ require __DIR__ . '/includes/header.php';
           <div class="table-responsive">
             <table class="table table-hover align-middle mb-0">
               <thead>
-                <tr><th scope="col">Clave</th><th scope="col">Nombre y descripción</th><th scope="col">Estado</th><th scope="col">Acciones</th></tr>
+                <tr><th scope="col">Clave</th><th scope="col">Nombre y descripción</th><th scope="col">Estado</th><th scope="col">Paquete ZIP y acciones</th></tr>
               </thead>
               <tbody>
                 <?php foreach ($modules as $module): ?>
@@ -214,6 +266,34 @@ require __DIR__ . '/includes/header.php';
                         <button class="btn btn-outline-danger btn-sm" type="submit" form="module-<?= escape($module['id']) ?>" name="action" value="delete" formnovalidate onclick="return confirm('¿Eliminar este módulo del catálogo?')">
                           <i class="bi bi-trash me-1"></i>Eliminar
                         </button>
+                      </div>
+                      <div class="border-top mt-3 pt-3">
+                        <?php if (is_string($module['archive_path'])): ?>
+                          <p class="small mb-2">
+                            <i class="bi bi-file-earmark-zip me-1"></i>
+                            <?= escape($module['archive_original_name']) ?>
+                            <span class="text-body-secondary">(<?= escape(number_format((int) $module['archive_size'] / 1048576, 2)) ?> MiB)</span>
+                          </p>
+                          <a class="btn btn-outline-primary btn-sm mb-2" href="<?= escape(app_url('panel/modulo-descargar.php?id=' . $module['id'])) ?>">
+                            <i class="bi bi-download me-1"></i>Descargar para revisar
+                          </a>
+                          <p class="small text-body-secondary mb-2">SHA-256: <code><?= escape($module['archive_sha256']) ?></code></p>
+                        <?php else: ?>
+                          <p class="small text-body-secondary">Sin ZIP adjunto.</p>
+                        <?php endif; ?>
+                        <form method="post" enctype="multipart/form-data" action="<?= escape(app_url('panel/modulos.php')) ?>">
+                          <?= csrf_field() ?>
+                          <input type="hidden" name="action" value="upload">
+                          <input type="hidden" name="id" value="<?= escape($module['id']) ?>">
+                          <label class="form-label small" for="archive-<?= escape($module['id']) ?>">
+                            <?= is_string($module['archive_path']) ? 'Reemplazar ZIP' : 'Adjuntar ZIP' ?>
+                          </label>
+                          <input class="form-control form-control-sm mb-2" type="file" id="archive-<?= escape($module['id']) ?>" name="archive" accept=".zip,application/zip" required>
+                          <button class="btn btn-outline-secondary btn-sm" type="submit">
+                            <i class="bi bi-upload me-1"></i>Guardar ZIP
+                          </button>
+                          <div class="form-text">Solo ZIP válido, máximo 20 MiB. No se ejecuta automáticamente.</div>
+                        </form>
                       </div>
                     </td>
                   </tr>

@@ -62,6 +62,11 @@ $activePage = $activePage ?? 'inicio';
                 <i class="nav-icon bi bi-grid"></i><p>Módulos</p>
               </a>
             </li>
+            <li class="nav-item">
+              <a href="<?= escape(app_url('panel/colaboradores.php')) ?>" class="nav-link <?= $activePage === 'colaboradores' ? 'active' : '' ?>">
+                <i class="nav-icon bi bi-people"></i><p>Colaboradores</p>
+              </a>
+            </li>
           </ul>
         </nav>
       </div>

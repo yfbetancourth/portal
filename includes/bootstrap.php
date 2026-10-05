@@ -148,3 +148,30 @@ function close_collaborator_session(): void
     ]);
     session_destroy();
 }
+
+function revoke_user_sessions(PDO $connection, int $userId): void
+{
+    $statement = $connection->prepare(
+        'SELECT session_hash
+         FROM auth_sessions
+         WHERE user_id = :user_id AND ended_at IS NULL
+         FOR UPDATE'
+    );
+    $statement->execute(['user_id' => $userId]);
+    $sessionHashes = $statement->fetchAll(PDO::FETCH_COLUMN);
+
+    $history = $connection->prepare(
+        "INSERT INTO auth_login_history (user_id, session_hash, event_type, occurred_at)
+         VALUES (:user_id, :session_hash, 'logout', UTC_TIMESTAMP(6))"
+    );
+    foreach ($sessionHashes as $sessionHash) {
+        $history->execute(['user_id' => $userId, 'session_hash' => $sessionHash]);
+    }
+
+    $statement = $connection->prepare(
+        "UPDATE auth_sessions
+         SET ended_at = UTC_TIMESTAMP(6), end_reason = 'logout'
+         WHERE user_id = :user_id AND ended_at IS NULL"
+    );
+    $statement->execute(['user_id' => $userId]);
+}
