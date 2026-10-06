@@ -10,7 +10,9 @@ $appDirectory = trim(str_replace('\\', '/', $appDirectory), '/');
 define('APP_BASE_PATH', $appDirectory === '' ? '' : '/' . $appDirectory);
 
 $isHttps = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-session_name('portal_session');
+$scriptPath = str_replace('\\', '/', $_SERVER['SCRIPT_NAME'] ?? '');
+$isPanelRequest = preg_match('#(?:^|/)panel(?:/|$)#', $scriptPath) === 1;
+session_name($isPanelRequest ? 'portal_session' : 'portal_user_session');
 session_set_cookie_params([
     'lifetime' => 0,
     'path' => APP_BASE_PATH === '' ? '/' : APP_BASE_PATH . '/',

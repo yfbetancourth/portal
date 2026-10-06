@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/includes/auth.php';
 $collaborator = require_collaborator();
+require_permission($collaborator, 'dashboard', 'read');
 $pageTitle = 'Inicio';
 $activePage = 'inicio';
 require __DIR__ . '/includes/header.php';
@@ -27,7 +28,7 @@ require __DIR__ . '/includes/header.php';
         <dl class="row mb-0">
           <dt class="col-sm-3">Nombre</dt><dd class="col-sm-9"><?= escape($collaborator['nombre']) ?></dd>
           <dt class="col-sm-3">Correo</dt><dd class="col-sm-9"><?= escape($collaborator['email']) ?></dd>
-          <dt class="col-sm-3">Rol</dt><dd class="col-sm-9"><span class="badge text-bg-primary"><?= escape($collaborator['rol']) ?></span></dd>
+          <dt class="col-sm-3">Rol</dt><dd class="col-sm-9"><span class="badge text-bg-primary"><?= escape($collaborator['role_name']) ?></span></dd>
         </dl>
       </div>
     </div>

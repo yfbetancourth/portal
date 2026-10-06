@@ -28,7 +28,7 @@ $activePage = $activePage ?? 'inicio';
         <div class="d-flex flex-wrap align-items-center gap-3 ms-auto">
           <span class="navbar-text"><i class="bi bi-person-circle me-1"></i><?= escape($collaborator['nombre']) ?></span>
           <span class="badge text-bg-primary"><?= escape($collaborator['rol']) ?></span>
-          <a class="btn btn-outline-secondary btn-sm" href="<?= escape(app_url('panel/perfil.php')) ?>">Mi perfil</a>
+          <?php if (has_permission($collaborator, 'profile', 'read')): ?><a class="btn btn-outline-secondary btn-sm" href="<?= escape(app_url('panel/perfil.php')) ?>">Mi perfil</a><?php endif; ?>
           <form action="<?= escape(app_url('panel/cerrar-sesion.php')) ?>" method="post" class="m-0">
             <?= csrf_field() ?>
             <button class="btn btn-outline-danger btn-sm" type="submit">
@@ -47,26 +47,36 @@ $activePage = $activePage ?? 'inicio';
       <div class="sidebar-wrapper">
         <nav class="mt-2" aria-label="Menú del panel">
           <ul class="nav sidebar-menu flex-column" data-lte-toggle="treeview" role="menu">
-            <li class="nav-item">
+            <?php if (has_permission($collaborator, 'dashboard', 'read')): ?><li class="nav-item">
               <a href="<?= escape(app_url('panel/')) ?>" class="nav-link <?= $activePage === 'inicio' ? 'active' : '' ?>">
                 <i class="nav-icon bi bi-speedometer2"></i><p>Inicio</p>
               </a>
-            </li>
-            <li class="nav-item">
+            </li><?php endif; ?>
+            <?php if (has_resource_access($collaborator, 'profile')): ?><li class="nav-item">
               <a href="<?= escape(app_url('panel/perfil.php')) ?>" class="nav-link <?= $activePage === 'perfil' ? 'active' : '' ?>">
                 <i class="nav-icon bi bi-person-vcard"></i><p>Mi cuenta</p>
               </a>
-            </li>
-            <li class="nav-item">
+            </li><?php endif; ?>
+            <?php if (has_resource_access($collaborator, 'modules')): ?><li class="nav-item">
               <a href="<?= escape(app_url('panel/modulos.php')) ?>" class="nav-link <?= $activePage === 'modulos' ? 'active' : '' ?>">
                 <i class="nav-icon bi bi-grid"></i><p>Módulos</p>
               </a>
-            </li>
-            <li class="nav-item">
+            </li><?php endif; ?>
+            <?php if (has_resource_access($collaborator, 'products')): ?><li class="nav-item">
+              <a href="<?= escape(app_url('panel/productos.php')) ?>" class="nav-link <?= $activePage === 'productos' ? 'active' : '' ?>">
+                <i class="nav-icon bi bi-box-seam"></i><p>Productos</p>
+              </a>
+            </li><?php endif; ?>
+            <?php if (has_resource_access($collaborator, 'collaborators')): ?><li class="nav-item">
               <a href="<?= escape(app_url('panel/colaboradores.php')) ?>" class="nav-link <?= $activePage === 'colaboradores' ? 'active' : '' ?>">
                 <i class="nav-icon bi bi-people"></i><p>Colaboradores</p>
               </a>
-            </li>
+            </li><?php endif; ?>
+            <?php if ($collaborator['rol'] === 'administrador'): ?><li class="nav-item">
+              <a href="<?= escape(app_url('panel/usuarios.php')) ?>" class="nav-link <?= $activePage === 'usuarios' ? 'active' : '' ?>">
+                <i class="nav-icon bi bi-person-lines-fill"></i><p>Usuarios</p>
+              </a>
+            </li><?php endif; ?>
           </ul>
         </nav>
       </div>

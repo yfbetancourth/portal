@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/includes/bootstrap.php';
+require_once dirname(__DIR__, 2) . '/includes/permissions.php';
 
 function require_collaborator(): array
 {
@@ -12,11 +13,11 @@ function require_collaborator(): array
 
     try {
         $statement = database()->prepare(
-            "SELECT u.id, u.nombre, u.email, u.rol
+            "SELECT u.id, u.nombre, u.email, u.rol, r.name AS role_name
              FROM usuarios u
+             INNER JOIN roles r ON r.role_key = u.rol
              INNER JOIN auth_sessions s ON s.user_id = u.id
              WHERE u.id = :id AND u.activo = 1
-               AND u.rol IN ('administrador', 'colaborador')
                AND s.session_hash = :session_hash AND s.ended_at IS NULL
              LIMIT 1"
         );

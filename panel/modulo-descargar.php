@@ -3,7 +3,8 @@ declare(strict_types=1);
 
 require __DIR__ . '/includes/auth.php';
 require_once dirname(__DIR__) . '/includes/module_packages.php';
-require_collaborator();
+$collaborator = require_collaborator();
+require_permission($collaborator, 'modules', 'read');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);

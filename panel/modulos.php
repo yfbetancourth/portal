@@ -4,6 +4,12 @@ declare(strict_types=1);
 require __DIR__ . '/includes/auth.php';
 require_once dirname(__DIR__) . '/includes/module_packages.php';
 $collaborator = require_collaborator();
+$canReadModules = has_permission($collaborator, 'modules', 'read');
+$canCreateModules = has_permission($collaborator, 'modules', 'create');
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && !has_resource_access($collaborator, 'modules')) {
+    http_response_code(403);
+    exit('No tienes permiso para acceder a esta sección.');
+}
 
 $error = null;
 $newModule = [
@@ -19,6 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $action = $_POST['action'] ?? null;
         $id = filter_var($_POST['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        $permissionAction = $action === 'create' ? 'create'
+            : ($action === 'delete' ? 'delete'
+                : (in_array($action, ['upload', 'update'], true) ? 'update' : null));
+        if ($permissionAction !== null) {
+            require_permission($collaborator, 'modules', $permissionAction);
+        }
 
         if ($action === 'create') {
             $moduleKey = $_POST['module_key'] ?? null;
@@ -168,12 +180,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 try {
-    $modules = database()->query(
-        'SELECT id, module_key, name, description, is_active,
-                archive_path, archive_original_name, archive_sha256, archive_size, archive_uploaded_at
-         FROM panel_modules
-         ORDER BY name, id'
-    )->fetchAll();
+    if (!$canReadModules) {
+        $modules = [];
+        $loadError = null;
+    } else {
+        $modules = database()->query(
+            'SELECT id, module_key, name, description, is_active,
+                    archive_path, archive_original_name, archive_sha256, archive_size, archive_uploaded_at
+             FROM panel_modules
+             ORDER BY name, id'
+        )->fetchAll();
+    }
 } catch (PDOException $exception) {
     error_log('No se pudo cargar el catálogo de módulos: ' . $exception->getMessage());
     http_response_code(500);
@@ -196,6 +213,7 @@ require __DIR__ . '/includes/header.php';
     <div class="card">
       <div class="card-header"><h2 class="card-title h5 mb-0">Agregar módulo</h2></div>
       <div class="card-body">
+        <?php if ($canCreateModules): ?>
         <form method="post" action="<?= escape(app_url('panel/modulos.php')) ?>">
           <?= csrf_field() ?>
           <input type="hidden" name="action" value="create">
@@ -219,6 +237,9 @@ require __DIR__ . '/includes/header.php';
           </div>
           <button class="btn btn-primary" type="submit"><i class="bi bi-plus-lg me-1"></i>Agregar módulo</button>
         </form>
+        <?php else: ?>
+          <p class="text-body-secondary mb-0">No tienes permiso para crear módulos.</p>
+        <?php endif; ?>
       </div>
     </div>
   </div>
@@ -228,7 +249,9 @@ require __DIR__ . '/includes/header.php';
       <div class="card-header"><h2 class="card-title h5 mb-0">Catálogo de módulos</h2></div>
       <div class="card-body p-0">
         <?php if (isset($loadError)): ?><div class="alert alert-danger m-3" role="alert"><?= escape($loadError) ?></div><?php endif; ?>
-        <?php if ($modules === []): ?>
+        <?php if (!$canReadModules): ?>
+          <p class="p-3 mb-0 text-body-secondary">Tienes acceso a acciones concretas, pero no permiso para consultar el catálogo.</p>
+        <?php elseif ($modules === []): ?>
           <p class="p-3 mb-0 text-body-secondary">Todavía no hay módulos registrados.</p>
         <?php else: ?>
           <div class="table-responsive">
@@ -246,26 +269,26 @@ require __DIR__ . '/includes/header.php';
                         <input type="hidden" name="action" value="update">
                         <input type="hidden" name="id" value="<?= escape($module['id']) ?>">
                         <label class="visually-hidden" for="name-<?= escape($module['id']) ?>">Nombre</label>
-                        <input class="form-control form-control-sm mb-2" id="name-<?= escape($module['id']) ?>" name="name" value="<?= escape($module['name']) ?>" maxlength="100" required>
+                        <input class="form-control form-control-sm mb-2" id="name-<?= escape($module['id']) ?>" name="name" value="<?= escape($module['name']) ?>" maxlength="100" <?= has_permission($collaborator, 'modules', 'update') ? 'required' : 'disabled' ?>>
                         <label class="visually-hidden" for="description-<?= escape($module['id']) ?>">Descripción</label>
-                        <textarea class="form-control form-control-sm" id="description-<?= escape($module['id']) ?>" name="description" rows="2" maxlength="500"><?= escape($module['description']) ?></textarea>
+                        <textarea class="form-control form-control-sm" id="description-<?= escape($module['id']) ?>" name="description" rows="2" maxlength="500" <?= has_permission($collaborator, 'modules', 'update') ? '' : 'disabled' ?>><?= escape($module['description']) ?></textarea>
                       </form>
                     </td>
                     <td>
                       <div class="form-check form-switch">
-                        <input type="hidden" name="is_active" value="0" form="module-<?= escape($module['id']) ?>">
-                        <input class="form-check-input" type="checkbox" id="active-<?= escape($module['id']) ?>" name="is_active" value="1" form="module-<?= escape($module['id']) ?>" <?= (int) $module['is_active'] === 1 ? 'checked' : '' ?>>
+                        <input type="hidden" name="is_active" value="0" form="module-<?= escape($module['id']) ?>" <?= has_permission($collaborator, 'modules', 'update') ? '' : 'disabled' ?>>
+                        <input class="form-check-input" type="checkbox" id="active-<?= escape($module['id']) ?>" name="is_active" value="1" form="module-<?= escape($module['id']) ?>" <?= (int) $module['is_active'] === 1 ? 'checked' : '' ?> <?= has_permission($collaborator, 'modules', 'update') ? '' : 'disabled' ?>>
                         <label class="form-check-label" for="active-<?= escape($module['id']) ?>"><?= (int) $module['is_active'] === 1 ? 'Activo' : 'Inactivo' ?></label>
                       </div>
                     </td>
                     <td>
                       <div class="d-flex flex-wrap gap-2">
-                        <button class="btn btn-primary btn-sm" type="submit" form="module-<?= escape($module['id']) ?>">
+                        <?php if (has_permission($collaborator, 'modules', 'update')): ?><button class="btn btn-primary btn-sm" type="submit" form="module-<?= escape($module['id']) ?>">
                           <i class="bi bi-check-lg me-1"></i>Guardar
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" type="submit" form="module-<?= escape($module['id']) ?>" name="action" value="delete" formnovalidate onclick="return confirm('¿Eliminar este módulo del catálogo?')">
+                        </button><?php endif; ?>
+                        <?php if (has_permission($collaborator, 'modules', 'delete')): ?><button class="btn btn-outline-danger btn-sm" type="submit" form="module-<?= escape($module['id']) ?>" name="action" value="delete" formnovalidate onclick="return confirm('¿Eliminar este módulo del catálogo?')">
                           <i class="bi bi-trash me-1"></i>Eliminar
-                        </button>
+                        </button><?php endif; ?>
                       </div>
                       <div class="border-top mt-3 pt-3">
                         <?php if (is_string($module['archive_path'])): ?>
@@ -281,7 +304,7 @@ require __DIR__ . '/includes/header.php';
                         <?php else: ?>
                           <p class="small text-body-secondary">Sin ZIP adjunto.</p>
                         <?php endif; ?>
-                        <form method="post" enctype="multipart/form-data" action="<?= escape(app_url('panel/modulos.php')) ?>">
+                        <?php if (has_permission($collaborator, 'modules', 'update')): ?><form method="post" enctype="multipart/form-data" action="<?= escape(app_url('panel/modulos.php')) ?>">
                           <?= csrf_field() ?>
                           <input type="hidden" name="action" value="upload">
                           <input type="hidden" name="id" value="<?= escape($module['id']) ?>">
@@ -294,6 +317,7 @@ require __DIR__ . '/includes/header.php';
                           </button>
                           <div class="form-text">Solo ZIP válido, máximo 20 MiB. No se ejecuta automáticamente.</div>
                         </form>
+                        <?php endif; ?>
                       </div>
                     </td>
                   </tr>

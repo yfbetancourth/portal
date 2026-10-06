@@ -10,7 +10,7 @@ if (isset($_SESSION['user_id']) && is_int($_SESSION['user_id'])) {
         $statement = database()->prepare(
             "SELECT u.id FROM usuarios u
              INNER JOIN auth_sessions s ON s.user_id = u.id
-             WHERE u.id = :id AND u.activo = 1 AND u.rol IN ('administrador', 'colaborador')
+             WHERE u.id = :id AND u.activo = 1
                AND s.session_hash = :session_hash AND s.ended_at IS NULL
              LIMIT 1"
         );
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $statement = database()->prepare(
                 "SELECT id, password_hash
                  FROM usuarios
-                 WHERE email = :email AND activo = 1 AND rol IN ('administrador', 'colaborador')
+                 WHERE email = :email AND activo = 1
                  LIMIT 1"
             );
             $statement->execute(['email' => $email]);

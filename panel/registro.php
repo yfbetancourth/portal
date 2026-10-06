@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/includes/bootstrap.php';
+require_once dirname(__DIR__) . '/includes/permissions.php';
 
 $email = '';
 $name = '';
@@ -29,8 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         || !is_string($confirmation) || !hash_equals($password, $confirmation)) {
         $error = 'Revisa los datos. La contraseña debe tener de 12 a 72 bytes y coincidir con la confirmación.';
     } else {
+        $connection = null;
         try {
-            $statement = database()->prepare(
+            $connection = database();
+            $connection->beginTransaction();
+            $statement = $connection->prepare(
                 "INSERT INTO usuarios (nombre, email, password_hash, rol)
                  VALUES (:nombre, :email, :password_hash, 'colaborador')"
             );
@@ -39,9 +43,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'email' => $email,
                 'password_hash' => password_hash($password, PASSWORD_DEFAULT),
             ]);
-            start_collaborator_session((int) database()->lastInsertId());
+            $userId = (int) $connection->lastInsertId();
+            grant_default_collaborator_permissions($connection, $userId);
+            $connection->commit();
+            start_collaborator_session($userId);
             redirect('panel/');
         } catch (PDOException $exception) {
+            if ($connection instanceof PDO && $connection->inTransaction()) {
+                $connection->rollBack();
+            }
             if ($exception->getCode() === '23000' && ($exception->errorInfo[1] ?? null) === 1062) {
                 $error = 'Ya existe una cuenta con ese correo electrónico.';
             } else {
